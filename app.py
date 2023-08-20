@@ -27,6 +27,11 @@ TAOZ = [(([6, 7, 8, 9], range(17,23), True) , 165.33),
 # FIXED = [[(range(1,13), range(0,24), True) , 60.07], [(range(1,13), range(0,24), False) , 60.07]]
 FIXED = 60.07
 
+SEASONS = {}
+for k,v in {'Summer': [6, 7, 8, 9], 'Winter': [12, 1, 2], 'Transition': [3, 4, 5, 10, 11]}.items():
+    for i in v:
+        SEASONS[i] = k
+
 
 def parse_datetime(date_str):
     # Function to parse the date-time string into separate date and time columns
@@ -34,7 +39,7 @@ def parse_datetime(date_str):
         dt_obj = pd.to_datetime(date_str, format='%d/%m/%Y %H:%M')
     except:
         dt_obj = pd.to_datetime('14/11/2022 09:15', format='%d/%m/%Y %H:%M')
-    return dt_obj, dt_obj.month, dt_obj.hour, dt_obj.weekday()
+    return dt_obj, dt_obj.month, dt_obj.hour, dt_obj.weekday(), SEASONS[dt_obj.month]
 
 
 def getprice(plan, month, hour, weekday):
@@ -52,7 +57,7 @@ def main(df):
 
     # Split the 'DateTime' column into 'Date' and 'Time' columns
     df['DateTime'] = df['DateTime'].apply(parse_datetime)
-    df[['DateTime', 'Month', 'Hour', 'Weekday']] = df['DateTime'].apply(pd.Series)
+    df[['DateTime', 'Month', 'Hour', 'Weekday', 'Season']] = df['DateTime'].apply(pd.Series)
 
     # Drop the original 'DateTime' column
     # df.drop(columns=['DateTime'], inplace=True)
@@ -122,27 +127,36 @@ def parse_contents(contents, filename, date):
     by_month = px.bar(dfm,
                       labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
                       barmode='group')
+    by_season = px.bar(data.groupby('Season')[['FixedCost', "Cost"]].sum(),
+                      labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
+                      barmode='group')
 
     t = df[['FixedCost', "Cost"]].sum().to_dict()
     total = {'Fixed Price Cost': t['FixedCost'],
              'TAOZ Price Cost': t['Cost'],
              '% Difference': 100.0 * (t['FixedCost'] - t['Cost']) / t['FixedCost']}
     return html.Div([
-        html.H5('File Name: %s' % filename),
-        html.H6('File Date: %s' % datetime.datetime.fromtimestamp(date)),
-
         html.H1(children="TAOZ Analytics"),
         html.P(
             children=(
-                "Analyze the electricity cost of TAOZ billing charges"
+                "Analyze the electricity cost of TAOZ billing charges VS. Fixed Price billing"
             ),
         ),
+        html.H5('File Name: %s' % filename),
+        html.H6('File Date: %s' % datetime.datetime.fromtimestamp(date)),
+        html.H4('From: %s' % data['DateTime'].min()),
+        html.H4('Until: %s' % data['DateTime'].max()),
+
         html.H2(children="Total Cost"),
         dash_table.DataTable(id='total',
                              data=[total],
                              style_header={'text-align': 'center',}),
+
         html.H2(children="Cost By Month"),
         dcc.Graph(figure=by_month),
+
+        html.H2(children="Cost By Season"),
+        dcc.Graph(figure=by_season),
     ])
 
 
