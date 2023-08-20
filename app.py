@@ -63,6 +63,7 @@ def main(df):
 
     return df
 
+
 app = Dash(__name__)
 
 app.layout = html.Div([
@@ -70,7 +71,7 @@ app.layout = html.Div([
         id='upload-data',
         children=html.Div([
             'Drag and Drop or ',
-            html.A('Select Files')
+            html.A('Select meter_####_XX_dd-mm-yyyy.csv File')
         ]),
         style={
             'width': '100%',
@@ -85,7 +86,11 @@ app.layout = html.Div([
         # Allow multiple files to be uploaded
         multiple=True
     ),
-    html.Div(id='output-data-upload'),
+    dcc.Loading(id="loading",
+                children=[html.Div([html.Div(id='output-data-upload')])],
+                type="default",
+                ),
+    # html.Div(id='output-data-upload'),
 ])
 
 
@@ -114,13 +119,17 @@ def parse_contents(contents, filename, date):
 
     dfm = data.groupby('Month')[['FixedCost', "Cost"]].sum()
     dfm.rename(index=month_names, inplace=True)
-    fig = px.bar(dfm,
-                 labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
-                 barmode='group')
+    by_month = px.bar(dfm,
+                      labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
+                      barmode='group')
 
+    t = df[['FixedCost', "Cost"]].sum().to_dict()
+    total = {'Fixed Price Cost': t['FixedCost'],
+             'TAOZ Price Cost': t['Cost'],
+             '% Difference': 100.0 * (t['FixedCost'] - t['Cost']) / t['FixedCost']}
     return html.Div([
-        html.H5(filename),
-        html.H6(datetime.datetime.fromtimestamp(date)),
+        html.H5('File Name: %s' % filename),
+        html.H6('File Date: %s' % datetime.datetime.fromtimestamp(date)),
 
         html.H1(children="TAOZ Analytics"),
         html.P(
@@ -128,7 +137,12 @@ def parse_contents(contents, filename, date):
                 "Analyze the electricity cost of TAOZ billing charges"
             ),
         ),
-        dcc.Graph(figure=fig),
+        html.H2(children="Total Cost"),
+        dash_table.DataTable(id='total',
+                             data=[total],
+                             style_header={'text-align': 'center',}),
+        html.H2(children="Cost By Month"),
+        dcc.Graph(figure=by_month),
     ])
 
 
