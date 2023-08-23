@@ -11,20 +11,18 @@ import plotly.express as px
 
 month_names = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:'Aug', 9:'Sep', 10:'Oct', 11:'Nov', 12:'Dec'}
 
-csv_file_path = r"C:\Users\sacra\Downloads\meter_22001772_LP_06-08-2023.csv"
-
 # Format: season: (months, peek-hours, peek applies to weekends?, peek price, low price)
-TAOZ  = {'Summer (Jun-Sep)': {'months': [6, 7, 8, 9],
-                              'peekhours': range(17, 23),
-                              'weekend': False,
-                              'peek': 165.33,
-                              'low': 48.15},
-         'Winter (Dec-Feb)': {'months': [12, 1, 2],
-                              'peekhours': range(17, 22),
-                              'weekend': True,
-                              'peek': 114.78,
-                              'low': 41.84},
-         'Transition (Mar-May,Oct-Nov)': {'months': [3, 4, 5, 10, 11],
+TAOZ = {'Summer (Jun-Sep)': {'months': [6, 7, 8, 9],
+                             'peekhours': range(17, 23),
+                             'weekend': False,
+                             'peek': 165.33,
+                             'low': 48.15},
+        'Winter (Dec-Feb)': {'months': [12, 1, 2],
+                             'peekhours': range(17, 22),
+                             'weekend': True,
+                             'peek': 114.78,
+                             'low': 41.84},
+        'Transition (Mar-May, Oct-Nov)': {'months': [3, 4, 5, 10, 11],
                                           'peekhours': range(17, 23),
                                           'weekend': False,
                                           'peek': 45.83,
@@ -76,6 +74,13 @@ def main(df):
     df['FixedCost'] = df['Kwh'] * FIXED / 100
 
     return df
+
+
+def relegend(fig, newnames):
+    fig.for_each_trace(lambda t: t.update(name=newnames[t.name],
+                                          legendgroup=newnames[t.name],
+                                          hovertemplate=t.hovertemplate.replace(t.name, newnames[t.name])))
+    return fig
 
 
 app = Dash(__name__)
@@ -131,18 +136,31 @@ def parse_contents(contents, filename, date):
         main(df)
     )
 
-    dfm = data.groupby('Month')[['FixedCost', "Cost"]].sum()
+    newnames = {"FixedCost": "Fixed Price", "Cost": "TAOZ Price"}
+    figs = []
+    dfm = data.groupby('Month')[['FixedCost', 'Cost']].sum()
     dfm.rename(index=month_names, inplace=True)
-    by_month = px.bar(dfm,
-                      labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
-                      barmode='group')
-    by_season = px.bar(data.groupby('Season')[['FixedCost', "Cost"]].sum(),
-                       labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
-                       barmode='group')
+    by_month = px.bar(dfm, barmode='group')
+    figs.append(by_month)
+    by_season = px.bar(data.groupby('Season')[['FixedCost', 'Cost']].sum(), barmode='group')
+    figs.append(by_season)
 
-    t = df[['FixedCost', "Cost"]].sum().to_dict()
-    total = {'Fixed Price Cost': t['FixedCost'],
-             'TAOZ Price Cost': t['Cost'],
+    by_hours = {}
+    for s in TAOZ.keys():
+        by_hours[s] = px.bar(df[df['Season'] == s].groupby('Hour')[['FixedCost', 'Cost']].sum(), barmode='group')
+        figs.append(by_hours[s])
+
+    for f in figs:
+        relegend(f, newnames)
+
+    by_hours_div = []
+    for k, v in by_hours.items():
+        by_hours_div.append(html.H2(children="Cost By Hour - %s" % k))
+        by_hours_div.append(dcc.Graph(figure=v))
+
+    t = df[['FixedCost', 'Cost']].sum().to_dict()
+    total = {'Fixed Price': t['FixedCost'],
+             'TAOZ Price': t['Cost'],
              '% Difference': 100.0 * (t['FixedCost'] - t['Cost']) / t['FixedCost']}
     return html.Div([
         html.H1(children="TAOZ Analytics"),
@@ -170,6 +188,8 @@ def parse_contents(contents, filename, date):
 
         html.H2(children="Cost By Season"),
         dcc.Graph(figure=by_season),
+
+        html.Div(by_hours_div),
     ])
 
 
