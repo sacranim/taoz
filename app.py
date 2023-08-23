@@ -13,23 +13,29 @@ month_names = {1:'Jan', 2:'Feb', 3:'Mar', 4:'Apr', 5:'May', 6:'Jun', 7:'Jul', 8:
 
 csv_file_path = r"C:\Users\sacra\Downloads\meter_22001772_LP_06-08-2023.csv"
 
-# Format: (months, hours, weekdays/weekend)
-TAOZ = [(([6, 7, 8, 9], range(17,23), True) , 165.33),
-        (([6, 7, 8, 9], list(range(0,17)) + [23], True) , 48.15),
-        (([6, 7, 8, 9], range(0,24), False) , 48.15),
-        (([12, 1, 2], range(17,22), True) , 114.78),
-        (([12, 1, 2], list(range(0,17)) + [22, 23], True) , 41.84),
-        (([12, 1, 2], range(17,22), False) , 114.78),
-        (([12, 1, 2], list(range(0,17)) + [22, 23], False) , 41.84),
-        (([3, 4, 5, 10, 11], range(17,23), True) , 45.83),
-        (([3, 4, 5, 10, 11], list(range(0,17)) + [23], True) , 40.84),
-        (([3, 4, 5, 10, 11], range(0,24), False) , 40.84)]
+# Format: season: (months, peek-hours, peek applies to weekends?, peek price, low price)
+TAOZ  = {'Summer (Jun-Sep)': {'months': [6, 7, 8, 9],
+                              'peekhours': range(17, 23),
+                              'weekend': False,
+                              'peek': 165.33,
+                              'low': 48.15},
+         'Winter (Dec-Feb)': {'months': [12, 1, 2],
+                              'peekhours': range(17, 22),
+                              'weekend': True,
+                              'peek': 114.78,
+                              'low': 41.84},
+         'Transition (Mar-May,Oct-Nov)': {'months': [3, 4, 5, 10, 11],
+                                          'peekhours': range(17, 23),
+                                          'weekend': False,
+                                          'peek': 45.83,
+                                          'low': 40.84}}
 # FIXED = [[(range(1,13), range(0,24), True) , 60.07], [(range(1,13), range(0,24), False) , 60.07]]
+# FIXED = {'All Year': (range(1,13), [], False, 60.07, 60.07),
 FIXED = 60.07
 
 SEASONS = {}
-for k,v in {'Summer': [6, 7, 8, 9], 'Winter': [12, 1, 2], 'Transition': [3, 4, 5, 10, 11]}.items():
-    for i in v:
+for k,v in TAOZ.items():
+    for i in v['months']:
         SEASONS[i] = k
 
 
@@ -44,9 +50,12 @@ def parse_datetime(date_str):
 
 def getprice(plan, month, hour, weekday):
     weekday = weekday < 6
-    for k in plan:
-        if month in k[0][0] and hour in k[0][1] and weekday == k[0][2]:
-            return k[1]
+    for k in plan.values():
+        if month in k['months']:
+          if hour in k['peekhours'] and (weekday or k['weekend']):
+            return k['peek']
+          else:
+            return k['low']
     print('Error: no match in price plan')
 
 
@@ -128,8 +137,8 @@ def parse_contents(contents, filename, date):
                       labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
                       barmode='group')
     by_season = px.bar(data.groupby('Season')[['FixedCost', "Cost"]].sum(),
-                      labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
-                      barmode='group')
+                       labels={"FixedCost": "Fixed price cost", "Cost": "TAOZ price cost"},
+                       barmode='group')
 
     t = df[['FixedCost', "Cost"]].sum().to_dict()
     total = {'Fixed Price Cost': t['FixedCost'],
@@ -150,7 +159,11 @@ def parse_contents(contents, filename, date):
         html.H2(children="Total Cost"),
         dash_table.DataTable(id='total',
                              data=[total],
-                             style_header={'text-align': 'center',}),
+                             style_cell={
+                                 'text-align': 'center',
+                                 'marginLeft': 'auto',
+                                 'marginRight': 'auto'
+                             }),
 
         html.H2(children="Cost By Month"),
         dcc.Graph(figure=by_month),
